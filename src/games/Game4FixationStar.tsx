@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStage } from '../lib/useStage'
 
 type Props = { durationMs: number; onEvent: (name: string, payload?: any)=>void; onDone: () => void }
@@ -9,15 +9,33 @@ export default function Game4FixationStar({ durationMs, onEvent, onDone }: Props
   const s1 = useMemo(() => { const i=new Image(); i.src='/assets/star/star1.png'; return i }, [])
   const s2 = useMemo(() => { const i=new Image(); i.src='/assets/star/star2.png'; return i }, [])
   const [done, setDone] = useState(false)
+  const onEventRef = useRef(onEvent)
+  const onDoneRef = useRef(onDone)
+
+  useEffect(() => { onEventRef.current = onEvent }, [onEvent])
+  useEffect(() => { onDoneRef.current = onDone }, [onDone])
 
   useEffect(() => {
     const c = canvasRef.current
     if (!c) return
     const ctx = c.getContext('2d')!
     const start = performance.now()
-    onEvent('game_start', { game: 4 })
+    let finished = false
+    let rafId = 0
+
+    onEventRef.current('game_start', { game: 4 })
+
+    const finishGame = () => {
+      if (finished) return
+      finished = true
+      onEventRef.current('game_end', { game: 4 })
+      setDone(true)
+      onDoneRef.current()
+    }
 
     const draw = () => {
+      if (finished) return
+
       const w = c.clientWidth, h=c.clientHeight
       ctx.clearRect(0,0,w,h)
       if (bg.complete) ctx.drawImage(bg,0,0,w,h)
@@ -27,9 +45,8 @@ export default function Game4FixationStar({ durationMs, onEvent, onDone }: Props
       const pulse = 1 + 0.08*Math.sin(t*3.2)
       const img = (Math.floor(t*2)%2===0) ? s1 : s2
       const size = 170 * pulse
-      if (img.complete){
-        ctx.drawImage(img, w/2-size/2, h/2-size/2, size, size)
-      } else {
+      if (img.complete) ctx.drawImage(img, w/2-size/2, h/2-size/2, size, size)
+      else {
         ctx.fillStyle='#facc15'
         ctx.beginPath(); ctx.arc(w/2,h/2, 50, 0, Math.PI*2); ctx.fill()
       }
@@ -39,15 +56,18 @@ export default function Game4FixationStar({ durationMs, onEvent, onDone }: Props
       ctx.fillText(`Time: ${left}s`, 18, 30)
 
       if (performance.now()-start >= durationMs){
-        onEvent('game_end', { game: 4 })
-        setDone(true)
-        onDone()
+        finishGame()
         return
       }
-      requestAnimationFrame(draw)
+      rafId = requestAnimationFrame(draw)
     }
-    requestAnimationFrame(draw)
-  }, [canvasRef, bg, s1, s2, durationMs, onEvent])
+
+    rafId = requestAnimationFrame(draw)
+    return () => {
+      finished = true
+      cancelAnimationFrame(rafId)
+    }
+  }, [canvasRef, bg, s1, s2, durationMs])
 
   return (
     <div style={{height:'100%'}}>

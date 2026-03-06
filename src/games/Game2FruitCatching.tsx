@@ -12,6 +12,8 @@ export default function Game2FruitCatching({ durationMs, onEvent, onDone }: Prop
   const [score, setScore] = useState(0)
   const scoreRef = useRef(0)
   const [done, setDone] = useState(false)
+  const onEventRef = useRef(onEvent)
+  const onDoneRef = useRef(onDone)
 
   const nonRed = useMemo(() => [
     '/assets/fruits/nonRedBannana.png',
@@ -24,6 +26,9 @@ export default function Game2FruitCatching({ durationMs, onEvent, onDone }: Prop
   ], [])
   const target = '/assets/fruits/redStrawberry.png'
 
+  useEffect(() => { onEventRef.current = onEvent }, [onEvent])
+  useEffect(() => { onDoneRef.current = onDone }, [onDone])
+
   useEffect(() => {
     const c = canvasRef.current
     if (!c) return
@@ -32,7 +37,7 @@ export default function Game2FruitCatching({ durationMs, onEvent, onDone }: Prop
     let finished = false
     let rafId = 0
 
-    onEvent('game_start', { game: 2 })
+    onEventRef.current('game_start', { game: 2 })
 
     const imgs = new Map<string, HTMLImageElement>()
     const getImg = (src:string) => {
@@ -50,9 +55,9 @@ export default function Game2FruitCatching({ durationMs, onEvent, onDone }: Prop
     const finishGame = () => {
       if (finished) return
       finished = true
-      onEvent('game_end', { game: 2, score: scoreRef.current })
+      onEventRef.current('game_end', { game: 2, score: scoreRef.current })
       setDone(true)
-      onDone()
+      onDoneRef.current()
     }
 
     const spawnFruit = () => {
@@ -61,18 +66,9 @@ export default function Game2FruitCatching({ durationMs, onEvent, onDone }: Prop
       nextSide = nextSide === 'left' ? 'right' : 'left'
       const src = isTarget ? target : nonRed[Math.floor(Math.random()*nonRed.length)]
       const id = `f_${Date.now()}_${Math.random().toString(16).slice(2)}`
-      activeFruit = {
-        id,
-        src,
-        side,
-        x: laneX[side],
-        y: laneY,
-        tOn: performance.now(),
-        isTarget,
-        caught:false,
-      }
+      activeFruit = { id, src, side, x: laneX[side], y: laneY, tOn: performance.now(), isTarget, caught:false }
       activeUntil = performance.now() + 950
-      onEvent('target_on', { game:2, trial_id:id, side, isTarget, x:activeFruit.x, y:activeFruit.y })
+      onEventRef.current('target_on', { game:2, trial_id:id, side, isTarget, x:activeFruit.x, y:activeFruit.y })
     }
 
     spawnFruit()
@@ -126,15 +122,14 @@ export default function Game2FruitCatching({ durationMs, onEvent, onDone }: Prop
       if (d > HIT_R) return
 
       const rt = Math.round(performance.now() - activeFruit.tOn)
+      activeFruit.caught = true
       if (activeFruit.isTarget){
-        activeFruit.caught = true
         scoreRef.current += 1
         setScore(scoreRef.current)
-        onEvent('response', { game:2, trial_id:activeFruit.id, correct:1, rt_ms:rt, x:mx, y:my, hit:true })
-        onEvent('fruit_catch', { trial_id:activeFruit.id })
+        onEventRef.current('response', { game:2, trial_id:activeFruit.id, correct:1, rt_ms:rt, x:mx, y:my, hit:true })
+        onEventRef.current('fruit_catch', { trial_id:activeFruit.id })
       } else {
-        activeFruit.caught = true
-        onEvent('response', { game:2, trial_id:activeFruit.id, correct:0, rt_ms:rt, x:mx, y:my, hit:true })
+        onEventRef.current('response', { game:2, trial_id:activeFruit.id, correct:0, rt_ms:rt, x:mx, y:my, hit:true })
       }
     }
 
@@ -144,7 +139,7 @@ export default function Game2FruitCatching({ durationMs, onEvent, onDone }: Prop
       cancelAnimationFrame(rafId)
       c.removeEventListener('click', onClick)
     }
-  }, [canvasRef, bg, basket, durationMs, nonRed, onEvent, onDone, target])
+  }, [canvasRef, bg, basket, durationMs, nonRed, target])
 
   return (
     <div style={{height:'100%'}}>

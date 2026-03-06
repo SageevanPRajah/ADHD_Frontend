@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import EyeTrackerPanel from './components/EyeTrackerPanel'
 import InstructionModal from './components/InstructionModal'
 import Calibration from './games/Calibration'
@@ -38,21 +38,21 @@ export default function App(){
   const [pendingStep, setPendingStep] = useState<Step>('calibration')
   const [instr, setInstr] = useState({title:'', image:'', en:'', si:'', ta:''})
 
-  const openInstr = (next: Step, title:string, image:string, en:string, si:string, ta:string) => {
+  const openInstr = useCallback((next: Step, title:string, image:string, en:string, si:string, ta:string) => {
     setPendingStep(next)
     setInstr({title, image, en, si, ta})
     setShowInstr(true)
-  }
+  }, [])
 
-  const sendEvent = (name:string, payload?:any) => {
+  const sendEvent = useCallback((name:string, payload?:any) => {
     const t_ms = performance.now()
     wsRef.current?.send({ type:'event', t_ms, name, payload })
-  }
+  }, [])
 
-  const sendCalib = (s: any) => {
+  const sendCalib = useCallback((s: any) => {
     const t_ms = performance.now()
     wsRef.current?.send({ type:'calib', t_ms, ...s })
-  }
+  }, [])
 
   const startWebcamRecording = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false })
@@ -108,7 +108,7 @@ export default function App(){
     alert('Session started. Do calibration first.')
   }
 
-  const gotoWithInstr = (next: Step) => {
+  const gotoWithInstr = useCallback((next: Step) => {
     if (next==='g1'){
       openInstr('g1','Game 1 — Pop the bubbles','/assets/plainSky.png',
         'Pop bubbles to free butterflies. Click the bubble to release the butterfly. Play for 30 seconds.',
@@ -145,13 +145,13 @@ export default function App(){
       ); return
     }
     setStep(next)
-  }
+  }, [openInstr])
 
-  const onInstructionOk = () => {
+  const onInstructionOk = useCallback(() => {
     setShowInstr(false)
     setStep(pendingStep)
     sendEvent('step_start', { step: pendingStep })
-  }
+  }, [pendingStep, sendEvent])
 
   const renderStage = () => {
     if (step==='consent'){

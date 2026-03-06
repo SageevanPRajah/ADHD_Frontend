@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStage } from '../lib/useStage'
 
 type Props = { durationMs: number; onEvent: (name: string, payload?: any)=>void; onDone: () => void }
@@ -7,11 +7,14 @@ type Bubble = { id:string; x:number; y:number; r:number; vx:number; vy:number; b
 
 export default function Game1BubbleButterfly({ durationMs, onEvent, onDone }: Props){
   const canvasRef = useStage()
-  const butterflies = useMemo(() => (
-    [1,2,3,4,5,6].map(i => `/assets/butterflyFlying/butterflyFlying${i}.png`)
-  ), [])
+  const butterflies = useMemo(() => [1,2,3,4,5,6].map(i => `/assets/butterflyFlying/butterflyFlying${i}.png`), [])
   const bg = useMemo(() => { const i=new Image(); i.src='/assets/plainSky.png'; return i }, [])
   const [done, setDone] = useState(false)
+  const onEventRef = useRef(onEvent)
+  const onDoneRef = useRef(onDone)
+
+  useEffect(() => { onEventRef.current = onEvent }, [onEvent])
+  useEffect(() => { onDoneRef.current = onDone }, [onDone])
 
   useEffect(() => {
     const c = canvasRef.current
@@ -24,12 +27,12 @@ export default function Game1BubbleButterfly({ durationMs, onEvent, onDone }: Pr
     const finishGame = () => {
       if (finished) return
       finished = true
-      onEvent('game_end', { game: 1 })
+      onEventRef.current('game_end', { game: 1 })
       setDone(true)
-      onDone()
+      onDoneRef.current()
     }
 
-    onEvent('game_start', { game: 1 })
+    onEventRef.current('game_start', { game: 1 })
 
     const bubbles: Bubble[] = Array.from({length: 10}).map((_,k)=>({
       id: `b${k}_${Date.now()}`,
@@ -57,14 +60,12 @@ export default function Game1BubbleButterfly({ durationMs, onEvent, onDone }: Pr
           b.x += b.vx; b.y += b.vy
           if (b.x < b.r || b.x > w-b.r) b.vx *= -1
           if (b.y < b.r || b.y > h-b.r) b.vy *= -1
-
           const g = ctx.createRadialGradient(b.x-b.r*0.3, b.y-b.r*0.3, b.r*0.2, b.x, b.y, b.r)
           g.addColorStop(0, 'rgba(255,255,255,0.35)')
           g.addColorStop(1, 'rgba(59,130,246,0.10)')
           ctx.fillStyle=g
           ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill()
           ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=3; ctx.stroke()
-
           const bi = imgs[b.butterflyIdx]
           if (bi.complete){
             const s = b.r*1.2
@@ -85,8 +86,7 @@ export default function Game1BubbleButterfly({ durationMs, onEvent, onDone }: Pr
       ctx.fillStyle='#e5e7eb'; ctx.font='700 20px system-ui'
       ctx.fillText(`Time: ${left}s`, 18, 30)
 
-      const allFreed = bubbles.every(b => b.freed)
-      if (allFreed || t >= durationMs){
+      if (bubbles.every(b => b.freed) || t >= durationMs){
         finishGame()
         return
       }
@@ -105,11 +105,8 @@ export default function Game1BubbleButterfly({ durationMs, onEvent, onDone }: Pr
         const d2 = (mx-b.x)**2 + (my-b.y)**2
         if (d2 <= (b.r+14)**2){
           b.freed = true
-          onEvent('bubble_pop', { id:b.id, x:b.x, y:b.y })
-
-          if (bubbles.every(x => x.freed)) {
-            finishGame()
-          }
+          onEventRef.current('bubble_pop', { id:b.id, x:b.x, y:b.y })
+          if (bubbles.every(x => x.freed)) finishGame()
           break
         }
       }
@@ -120,7 +117,7 @@ export default function Game1BubbleButterfly({ durationMs, onEvent, onDone }: Pr
       cancelAnimationFrame(rafId)
       c.removeEventListener('click', onClick)
     }
-  }, [canvasRef, butterflies, bg, durationMs, onEvent, onDone])
+  }, [canvasRef, butterflies, bg, durationMs])
 
   return (
     <div style={{height:'100%'}}>
