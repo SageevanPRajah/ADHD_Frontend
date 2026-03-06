@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-const EyeTrackerPanel = React.lazy(() => import('./components/EyeTrackerPanel'));
+import EyeTrackerPanel from './components/EyeTrackerPanel'
 import InstructionModal from './components/InstructionModal'
 import Calibration from './games/Calibration'
 import Game1BubbleButterfly from './games/Game1BubbleButterfly'
