@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStage } from '../lib/useStage'
 import type { CalibSample, AffineModel } from '../lib/calibration'
 import { fitAffine } from '../lib/calibration'
@@ -31,7 +31,6 @@ export default function Calibration({ onEvent, onCalibSample, getLatestGaze, onM
   const [idx, setIdx] = useState(0)
   const idxRef = useRef(0)
   const [samples, setSamples] = useState<CalibSample[]>([])
-  const autoStartedRef = useRef(false)
 
   const img = useMemo(() => {
     const i = new Image()
@@ -40,14 +39,6 @@ export default function Calibration({ onEvent, onCalibSample, getLatestGaze, onM
   }, [])
 
   useEffect(() => { idxRef.current = idx }, [idx])
-
-  const startCalibration = useCallback((nextMode: 'calib9'|'recal3') => {
-    setSamples([])
-    setIdx(0)
-    setMode(nextMode)
-    onModel(null)
-    onEvent('calib_start',{mode: nextMode})
-  }, [onEvent, onModel])
 
   useEffect(() => {
     const c = canvasRef.current
@@ -82,22 +73,7 @@ export default function Calibration({ onEvent, onCalibSample, getLatestGaze, onM
           const s = 54
           ctx.save()
           ctx.translate(p.x, p.y)
-          if (img.complete && img.naturalWidth > 0) {
-            ctx.drawImage(img, -s/2, -s/2, s, s)
-          } else {
-            ctx.beginPath()
-            ctx.arc(0, 0, 14, 0, Math.PI * 2)
-            ctx.fillStyle = '#ef4444'
-            ctx.fill()
-            ctx.lineWidth = 4
-            ctx.strokeStyle = '#ffffff'
-            ctx.beginPath()
-            ctx.moveTo(-22, 0)
-            ctx.lineTo(22, 0)
-            ctx.moveTo(0, -22)
-            ctx.lineTo(0, 22)
-            ctx.stroke()
-          }
+          ctx.drawImage(img, -s/2, -s/2, s, s)
           ctx.restore()
 
           // subtle ring
@@ -154,14 +130,6 @@ export default function Calibration({ onEvent, onCalibSample, getLatestGaze, onM
     return () => clearInterval(timer)
   }, [canvasRef, mode, onCalibSample, onEvent, getLatestGaze])
 
-
-  useEffect(() => {
-    if (autoStartedRef.current) return
-    autoStartedRef.current = true
-    const t = window.setTimeout(() => startCalibration('calib9'), 250)
-    return () => window.clearTimeout(t)
-  }, [startCalibration])
-
   useEffect(() => {
     if (mode === 'idle') return
     const c = canvasRef.current
@@ -178,12 +146,28 @@ export default function Calibration({ onEvent, onCalibSample, getLatestGaze, onM
   }, [idx, mode, samples, canvasRef, onEvent, onModel])
 
   return (
-    <div style={{height:'100%', position:'relative'}}>
-      <div className="row" style={{gap:8, padding:12, position:'absolute', top: 0, left: 0, right: 0, zIndex: 3, pointerEvents: 'auto'}}>
-        <button className="btn secondary" onClick={() => startCalibration('calib9')}>
+    <div style={{height:'100%'}}>
+      <div className="row" style={{gap:8, padding:12}}>
+        <button
+          className="btn secondary"
+          onClick={() => {
+            setSamples([])
+            setIdx(0)
+            setMode('calib9')
+            onEvent('calib_start',{mode:'calib9'})
+          }}
+        >
           Start 9-Point
         </button>
-        <button className="btn ghost" onClick={() => startCalibration('recal3')}>
+        <button
+          className="btn ghost"
+          onClick={() => {
+            setSamples([])
+            setIdx(0)
+            setMode('recal3')
+            onEvent('calib_start',{mode:'recal3'})
+          }}
+        >
           Recalibrate 3-Point
         </button>
         <span className="pill" style={{marginLeft:'auto'}}>

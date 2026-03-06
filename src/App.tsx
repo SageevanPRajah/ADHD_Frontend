@@ -23,6 +23,7 @@ export default function App(){
   const [eyeEnabled, setEyeEnabled] = useState(true)
   const [showEyePreview, setShowEyePreview] = useState(false)
   const [affine, setAffine] = useState<AffineModel|null>(null)
+  const [calibrationStatus, setCalibrationStatus] = useState<'not_started'|'ready'|'failed'|'skipped'>('not_started')
   const wsRef = useRef<ReturnType<typeof connectWs> | null>(null)
 
   const [step, setStep] = useState<Step>('consent')
@@ -82,6 +83,8 @@ export default function App(){
     setWsStatus('connecting')
     const { sessionId: sid } = await startSession(meta)
     setSessionId(sid)
+    setAffine(null)
+    setCalibrationStatus('not_started')
 
     const conn = connectWs(sid, () => {})
     wsRef.current = conn
@@ -181,16 +184,32 @@ export default function App(){
             onEvent={(n,p)=>sendEvent(n,p)}
             onCalibSample={sendCalib}
             getLatestGaze={() => latestRaw.current}
-            onModel={(m) => { setAffine(m); sendEvent('calib_model', { ok: !!m }) }}
+            onModel={(m) => {
+              setAffine(m)
+              setCalibrationStatus(m ? 'ready' : 'failed')
+              sendEvent('calib_model', { ok: !!m })
+            }}
           />
-          <div className="card" style={{position:'absolute', bottom: 16, left: 16, maxWidth: 640}}>
+          <div className="card" style={{position:'absolute', bottom: 16, left: 16, maxWidth: 720}}>
             <div style={{fontWeight:800}}>Next</div>
             <div style={{opacity:.85, marginTop:6}}>
-              Do <b>9-point calibration</b> first. You can also use <b>Recalibrate</b> anytime.
+              Try <b>9-point calibration</b> first. If it fails, you can still continue to gameplay without changing the existing game logic.
             </div>
-            <div style={{marginTop:10, display:'flex', gap:10, alignItems:'center'}}>
+            <div style={{marginTop:10, display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
               <button className="btn secondary" onClick={()=>gotoWithInstr('g1')} disabled={wsStatus!=='connected'}>Start Game 1</button>
+              <button
+                className="btn ghost"
+                onClick={() => {
+                  setCalibrationStatus('skipped')
+                  sendEvent('calib_skipped', { reason: 'user_continue_without_calibration' })
+                  gotoWithInstr('g1')
+                }}
+                disabled={wsStatus!=='connected'}
+              >
+                Continue Without Calibration
+              </button>
               <span className="pill">Calibration model: {affine ? 'ready' : 'not ready'}</span>
+              <span className="pill">Status: {calibrationStatus.replace('_', ' ')}</span>
             </div>
           </div>
         </div>
