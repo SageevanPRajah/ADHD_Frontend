@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useStage } from '../lib/useStage'
 
 type Props = { durationMs: number; onEvent: (name: string, payload?: any)=>void; onDone: () => void }
@@ -10,6 +10,7 @@ export default function Game2FruitCatching({ durationMs, onEvent, onDone }: Prop
   const bg = useMemo(() => { const i=new Image(); i.src='/assets/garden.png'; return i }, [])
   const basket = useMemo(() => { const i=new Image(); i.src='/assets/emptyBasket.png'; return i }, [])
   const [score, setScore] = useState(0)
+  const scoreRef = useRef(0)
   const [done, setDone] = useState(false)
 
   const nonRed = useMemo(() => [
@@ -28,102 +29,122 @@ export default function Game2FruitCatching({ durationMs, onEvent, onDone }: Prop
     if (!c) return
     const ctx = c.getContext('2d')!
     const start = performance.now()
+    let finished = false
+    let rafId = 0
+
     onEvent('game_start', { game: 2 })
 
-    const fruits: Fruit[] = []
     const imgs = new Map<string, HTMLImageElement>()
     const getImg = (src:string) => {
       if (imgs.has(src)) return imgs.get(src)!
       const i=new Image(); i.src=src; imgs.set(src,i); return i
     }
-    const basketPos = { x: c.clientWidth/2, y: c.clientHeight*0.72 }
 
-    const spawn = () => {
-      const isTarget = Math.random() < 0.28
-      const side = Math.random() < 0.5 ? 'left' : 'right'
-      const src = isTarget ? target : nonRed[Math.floor(Math.random()*nonRed.length)]
-      const id = `f_${Date.now()}_${Math.random().toString(16).slice(2)}`
-      const x = side==='left' ? c.clientWidth*0.22 : c.clientWidth*0.78
-      const y = c.clientHeight*0.30 + Math.random()*c.clientHeight*0.25
-      fruits.push({ id, src, x, y, side, tOn: performance.now(), isTarget, caught:false })
-      onEvent('target_on', { game:2, trial_id:id, side, isTarget, x, y })
+    const basketPos = { x: c.clientWidth/2, y: c.clientHeight*0.72 }
+    const laneX = { left: c.clientWidth*0.22, right: c.clientWidth*0.78 }
+    const laneY = c.clientHeight*0.40
+    let activeFruit: Fruit | null = null
+    let activeUntil = 0
+    let nextSide: 'left' | 'right' = 'left'
+
+    const finishGame = () => {
+      if (finished) return
+      finished = true
+      onEvent('game_end', { game: 2, score: scoreRef.current })
+      setDone(true)
+      onDone()
     }
 
-    let nextSpawn = performance.now() + 600
+    const spawnFruit = () => {
+      const isTarget = Math.random() < 0.28
+      const side = nextSide
+      nextSide = nextSide === 'left' ? 'right' : 'left'
+      const src = isTarget ? target : nonRed[Math.floor(Math.random()*nonRed.length)]
+      const id = `f_${Date.now()}_${Math.random().toString(16).slice(2)}`
+      activeFruit = {
+        id,
+        src,
+        side,
+        x: laneX[side],
+        y: laneY,
+        tOn: performance.now(),
+        isTarget,
+        caught:false,
+      }
+      activeUntil = performance.now() + 950
+      onEvent('target_on', { game:2, trial_id:id, side, isTarget, x:activeFruit.x, y:activeFruit.y })
+    }
+
+    spawnFruit()
+
     const draw = () => {
+      if (finished) return
+
       const w = c.clientWidth, h=c.clientHeight
       ctx.clearRect(0,0,w,h)
       if (bg.complete) ctx.drawImage(bg,0,0,w,h)
       else { ctx.fillStyle='#0b132b'; ctx.fillRect(0,0,w,h) }
 
-      // basket
-      const bImg = basket
-      if (bImg.complete){
+      if (basket.complete){
         const bw = 180, bh = 140
-        ctx.drawImage(bImg, basketPos.x-bw/2, basketPos.y-bh/2, bw, bh)
+        ctx.drawImage(basket, basketPos.x-bw/2, basketPos.y-bh/2, bw, bh)
       }
 
-      // fruits
-      for (const f of fruits){
-        if (f.caught) continue
-        const img = getImg(f.src)
+      if (activeFruit && !activeFruit.caught){
+        const img = getImg(activeFruit.src)
         const s = 84
-        if (img.complete) ctx.drawImage(img, f.x-s/2, f.y-s/2, s, s)
+        if (img.complete) ctx.drawImage(img, activeFruit.x-s/2, activeFruit.y-s/2, s, s)
       }
 
-      // hud
       const t = performance.now()-start
       const left = Math.max(0, Math.ceil((durationMs - t)/1000))
       ctx.fillStyle='#e5e7eb'; ctx.font='700 20px system-ui'
       ctx.fillText(`Time: ${left}s`, 18, 30)
-      ctx.fillText(`Score: ${score}`, 18, 55)
+      ctx.fillText(`Score: ${scoreRef.current}`, 18, 55)
 
-      if (performance.now() >= nextSpawn){
-        spawn()
-        nextSpawn = performance.now() + (380 + Math.random()*650)
+      if ((!activeFruit || activeFruit.caught || performance.now() >= activeUntil) && t < durationMs){
+        spawnFruit()
       }
 
       if (t >= durationMs){
-        onEvent('game_end', { game: 2, score })
-        setDone(true)
-        onDone()
+        finishGame()
         return
       }
-      requestAnimationFrame(draw)
+
+      rafId = requestAnimationFrame(draw)
     }
-    requestAnimationFrame(draw)
+    rafId = requestAnimationFrame(draw)
 
     const onClick = (e: MouseEvent) => {
+      if (finished || !activeFruit || activeFruit.caught) return
+
       const rect = c.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
-
-      // allow "near fruit" catch
       const HIT_R = 70
+      const d = Math.hypot(mx-activeFruit.x, my-activeFruit.y)
+      if (d > HIT_R) return
 
-      // find closest fruit
-      let best: Fruit | null = null
-      let bestD = 1e9
-      for (const f of fruits){
-        if (f.caught) continue
-        const d = Math.hypot(mx-f.x, my-f.y)
-        if (d < bestD){ bestD=d; best=f }
-      }
-      if (!best || bestD > HIT_R) return
-
-      const rt = Math.round(performance.now() - best.tOn)
-      if (best.isTarget){
-        best.caught = true
-        setScore(s => s + 1)
-        onEvent('response', { game:2, trial_id:best.id, correct:1, rt_ms:rt, x:mx, y:my, hit:true })
-        onEvent('fruit_catch', { trial_id:best.id })
+      const rt = Math.round(performance.now() - activeFruit.tOn)
+      if (activeFruit.isTarget){
+        activeFruit.caught = true
+        scoreRef.current += 1
+        setScore(scoreRef.current)
+        onEvent('response', { game:2, trial_id:activeFruit.id, correct:1, rt_ms:rt, x:mx, y:my, hit:true })
+        onEvent('fruit_catch', { trial_id:activeFruit.id })
       } else {
-        onEvent('response', { game:2, trial_id:best.id, correct:0, rt_ms:rt, x:mx, y:my, hit:true })
+        activeFruit.caught = true
+        onEvent('response', { game:2, trial_id:activeFruit.id, correct:0, rt_ms:rt, x:mx, y:my, hit:true })
       }
     }
+
     c.addEventListener('click', onClick)
-    return () => { c.removeEventListener('click', onClick) }
-  }, [canvasRef, bg, basket, durationMs, nonRed, score, onEvent])
+    return () => {
+      finished = true
+      cancelAnimationFrame(rafId)
+      c.removeEventListener('click', onClick)
+    }
+  }, [canvasRef, bg, basket, durationMs, nonRed, onEvent, onDone, target])
 
   return (
     <div style={{height:'100%'}}>

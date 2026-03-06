@@ -18,6 +18,17 @@ export default function Game1BubbleButterfly({ durationMs, onEvent, onDone }: Pr
     if (!c) return
     const ctx = c.getContext('2d')!
     const start = performance.now()
+    let finished = false
+    let rafId = 0
+
+    const finishGame = () => {
+      if (finished) return
+      finished = true
+      onEvent('game_end', { game: 1 })
+      setDone(true)
+      onDone()
+    }
+
     onEvent('game_start', { game: 1 })
 
     const bubbles: Bubble[] = Array.from({length: 10}).map((_,k)=>({
@@ -34,19 +45,19 @@ export default function Game1BubbleButterfly({ durationMs, onEvent, onDone }: Pr
     const imgs = butterflies.map(src => { const i=new Image(); i.src=src; return i })
 
     const draw = () => {
+      if (finished) return
+
       const w = c.clientWidth, h=c.clientHeight
       ctx.clearRect(0,0,w,h)
       if (bg.complete) ctx.drawImage(bg,0,0,w,h)
       else { ctx.fillStyle='#0b132b'; ctx.fillRect(0,0,w,h) }
 
-      // move + draw
       for (const b of bubbles){
         if (!b.freed){
           b.x += b.vx; b.y += b.vy
           if (b.x < b.r || b.x > w-b.r) b.vx *= -1
           if (b.y < b.r || b.y > h-b.r) b.vy *= -1
 
-          // bubble
           const g = ctx.createRadialGradient(b.x-b.r*0.3, b.y-b.r*0.3, b.r*0.2, b.x, b.y, b.r)
           g.addColorStop(0, 'rgba(255,255,255,0.35)')
           g.addColorStop(1, 'rgba(59,130,246,0.10)')
@@ -60,7 +71,6 @@ export default function Game1BubbleButterfly({ durationMs, onEvent, onDone }: Pr
             ctx.drawImage(bi, b.x-s/2, b.y-s/2, s, s)
           }
         } else {
-          // freed butterfly flies away
           b.y -= 2.2
           const bi = imgs[b.butterflyIdx]
           if (bi.complete){
@@ -70,23 +80,23 @@ export default function Game1BubbleButterfly({ durationMs, onEvent, onDone }: Pr
         }
       }
 
-      // timer text
       const t = performance.now()-start
       const left = Math.max(0, Math.ceil((durationMs - t)/1000))
       ctx.fillStyle='#e5e7eb'; ctx.font='700 20px system-ui'
       ctx.fillText(`Time: ${left}s`, 18, 30)
 
-      if (t >= durationMs){
-        onEvent('game_end', { game: 1 })
-        setDone(true)
-        onDone()
+      const allFreed = bubbles.every(b => b.freed)
+      if (allFreed || t >= durationMs){
+        finishGame()
         return
       }
-      requestAnimationFrame(draw)
+
+      rafId = requestAnimationFrame(draw)
     }
-    requestAnimationFrame(draw)
+    rafId = requestAnimationFrame(draw)
 
     const onClick = (e: MouseEvent) => {
+      if (finished) return
       const rect = c.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
@@ -96,13 +106,21 @@ export default function Game1BubbleButterfly({ durationMs, onEvent, onDone }: Pr
         if (d2 <= (b.r+14)**2){
           b.freed = true
           onEvent('bubble_pop', { id:b.id, x:b.x, y:b.y })
+
+          if (bubbles.every(x => x.freed)) {
+            finishGame()
+          }
           break
         }
       }
     }
     c.addEventListener('click', onClick)
-    return () => { c.removeEventListener('click', onClick) }
-  }, [canvasRef, butterflies, bg, durationMs, onEvent])
+    return () => {
+      finished = true
+      cancelAnimationFrame(rafId)
+      c.removeEventListener('click', onClick)
+    }
+  }, [canvasRef, butterflies, bg, durationMs, onEvent, onDone])
 
   return (
     <div style={{height:'100%'}}>
