@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import EyeTrackerPanel from './components/EyeTrackerPanel'
+const EyeTrackerPanel = React.lazy(() => import('./components/EyeTrackerPanel'));
 import InstructionModal from './components/InstructionModal'
 import Calibration from './games/Calibration'
 import Game1BubbleButterfly from './games/Game1BubbleButterfly'
@@ -20,7 +20,7 @@ export default function App(){
   const [meta, setMeta] = useState<SessionMeta>({ participantId:'', age: 8, condition:'Unsure' })
   const [sessionId, setSessionId] = useState<string>('')
   const [wsStatus, setWsStatus] = useState<'disconnected'|'connecting'|'connected'>('disconnected')
-  const [eyeEnabled, setEyeEnabled] = useState(true)
+  const [eyeEnabled, setEyeEnabled] = useState(false);
   const [showEyePreview, setShowEyePreview] = useState(false)
   const [affine, setAffine] = useState<AffineModel|null>(null)
   const [calibrationStatus, setCalibrationStatus] = useState<'not_started'|'ready'|'failed'|'skipped'>('not_started')
